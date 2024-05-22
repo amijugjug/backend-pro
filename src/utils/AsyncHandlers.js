@@ -9,3 +9,5 @@ const wrapInTryCatch = (requestFn) => async (req, res, next) => {
     next(err);
   }
 };
+
+export default asyncHandler;
