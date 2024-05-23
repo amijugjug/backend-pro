@@ -3,10 +3,12 @@ import ApiResponseHandler from "../utils/ApiResponseHandler.js";
 import asyncHandler from "../utils/AsyncHandlers.js";
 import {
   checkForNullOrNotAvaialble,
+  getLocalPathFromRequest,
   validateEmail,
 } from "../utils/Validations.js";
 import { User } from "../models/User.model.js";
 import uploadOnCloudinary from "../services/Cloudinary.services.js";
+import { AVATAR, COVER_IMAGE } from "../constants.js";
 
 export const registerUser = asyncHandler(async (req, res) => {
   const dataRecieved = req.body;
@@ -15,17 +17,11 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   // data validation
   if (!validateEmail(email)) {
-    throw new res.staus(400).json(
-      ApiErrorHandler(400, "Please input correct email.")
-    );
+    throw new ApiErrorHandler(400, "Please input correct email.");
   }
 
-  if (
-    checkForNullOrNotAvaialble([userName, email, fullName, avatar, password])
-  ) {
-    throw new res.staus(400).json(
-      ApiErrorHandler(400, "Empty field not allowed")
-    );
+  if (checkForNullOrNotAvaialble([userName, email, fullName, password])) {
+    throw new ApiErrorHandler(400, "Empty field not allowed");
   }
 
   // Checking if the user with same userName or email already exists
@@ -34,22 +30,19 @@ export const registerUser = asyncHandler(async (req, res) => {
   });
 
   if (ifUserAlreadyExists) {
-    throw new res.staus(409).json(
-      ApiErrorHandler(409, "User with email or username already exists")
+    throw new ApiErrorHandler(
+      409,
+      "User with same email or username already exists"
     );
   }
 
-  console.log("req.fiels : ", req.files);
-
   // Getting localPath from the req, so basically since we've user middleware what is did it added some more field to the req
   // this is the reason we will be able to access req.files { avatar & cooverImage } is the name we have passed to the middleware (multer).
-  const avatarLocalPath = req?.files?.avatar?.[0]?.path;
-  const coverImageLocalPath = req?.files?.coverImage?.[0]?.path;
+  const avatarLocalPath = getLocalPathFromRequest(req, AVATAR);
+  const coverImageLocalPath = getLocalPathFromRequest(req, COVER_IMAGE);
 
-  if (!isLocalAvatarExists) {
-    throw new res.staus(400).json(
-      ApiErrorHandler(400, "Avatar files is required")
-    );
+  if (!avatarLocalPath) {
+    throw new ApiErrorHandler(400, "Avatar files is required");
   }
 
   // upload the assets to cloudinary
@@ -57,7 +50,7 @@ export const registerUser = asyncHandler(async (req, res) => {
   const coverImage = await uploadOnCloudinary(coverImageLocalPath);
 
   if (!avatar) {
-    throw new res.staus(500).json(ApiErrorHandler(500, "Avatar not uploaded"));
+    throw new ApiErrorHandler(500, "Avatar not uploaded");
   }
 
   // Create user in mongoDB
@@ -76,8 +69,8 @@ export const registerUser = asyncHandler(async (req, res) => {
   );
 
   if (!createdUser) {
-    throw new res.staus(500).json(
-      ApiErrorHandler(
+    throw new res.status(500).json(
+      new ApiErrorHandler(
         500,
         "Something went wrong user not created successfully !!!"
       )
@@ -86,7 +79,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   // Send the response back to user
   return res
-    .staus(201)
+    .status(201)
     .json(
       new ApiResponseHandler(200, createdUser, "User created successfully")
     );

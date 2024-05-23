@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 
 const UserModel = new mongoose.Schema(
   {
-    username: {
+    userName: {
       type: String,
       required: true,
       unique: true,
@@ -16,7 +16,6 @@ const UserModel = new mongoose.Schema(
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Video",
-        required: true,
         unique: true,
         lowercase: true,
         trim: true,
@@ -39,6 +38,7 @@ const UserModel = new mongoose.Schema(
     },
     avatar: {
       type: String,
+      required: true,
     },
     coverImage: {
       type: String,
@@ -49,7 +49,6 @@ const UserModel = new mongoose.Schema(
     },
     refreshToken: {
       type: String,
-      required: true,
     },
   },
   { timestamps: true }

@@ -1,4 +1,5 @@
 import multer from "multer";
+import { separateFilename } from "../utils/Validations.js";
 
 // Saving the file in diskStorage.
 const storage = multer.diskStorage({
@@ -6,8 +7,10 @@ const storage = multer.diskStorage({
     cb(null, "./public/static");
   },
   filename: function (req, filename, cb) {
+    const [name, extension] = separateFilename(filename.originalname);
+
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, filename.originalName + "-" + uniqueSuffix);
+    cb(null, name + "-" + uniqueSuffix + "." + extension);
   },
 });
 
