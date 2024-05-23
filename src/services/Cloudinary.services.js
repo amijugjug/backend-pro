@@ -1,4 +1,4 @@
-import { v2 as uploader } from "cloudinary";
+import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
 
 // Service to upload the file to cloudinary.
