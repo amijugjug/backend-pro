@@ -78,7 +78,7 @@ UserModel.methods.generateAccessToken = function () {
     },
     process.env.ACCESS_TOKEN_SECRET,
     {
-      expiresIn: process.env.ACCESS_TOKEN_KEY,
+      expiresIn: process.env.ACCESS_TOKEN_EXPIRY,
     }
   );
 };
@@ -92,7 +92,7 @@ UserModel.methods.generateRefreshToken = function () {
     },
     process.env.REFRESH_TOKEN_SECRET,
     {
-      expiresIn: process.env.REFRESH_TOKEN_KEY,
+      expiresIn: process.env.REFRESH_TOKEN_EXPIRY,
     }
   );
 };

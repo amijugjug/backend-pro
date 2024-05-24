@@ -10,6 +10,23 @@ import { User } from "../models/User.model.js";
 import uploadOnCloudinary from "../services/Cloudinary.services.js";
 import { AVATAR, COVER_IMAGE } from "../constants.js";
 
+const generateAccessTokenAndRefreshToken = async (user) => {
+  try {
+    const accessToken = await user?.generateAccessToken();
+    const refreshToken = await user?.generateRefreshToken();
+
+    user.refreshToken = refreshToken;
+    await user.save({ validateBeforeSave: true });
+
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiErrorHandler(
+      500,
+      "Something went wrong while generating access token and refresh token"
+    );
+  }
+};
+
 export const registerUser = asyncHandler(async (req, res) => {
   const dataRecieved = req.body;
 
@@ -83,4 +100,96 @@ export const registerUser = asyncHandler(async (req, res) => {
     .json(
       new ApiResponseHandler(200, createdUser, "User created successfully")
     );
+});
+
+export const loginUser = asyncHandler(async (req, res) => {
+  console.log("req.body : ", req.body);
+  const { userName, email, password } = req.body;
+  console.log(
+    "🚀 ~ loginUser ~ username, email, password:",
+    userName,
+    email,
+    password
+  );
+
+  if (email && !validateEmail(email)) {
+    throw new ApiErrorHandler(400, "Please input correct email.");
+  }
+
+  const user = await User.findOne({
+    $or: [{ email }, { userName }],
+  });
+
+  console.log("user :", user);
+
+  if (!user) {
+    throw new ApiErrorHandler(404, "User not found");
+  }
+
+  const isPasswordCorrect = await user.comparePassword(password);
+
+  if (!isPasswordCorrect) {
+    throw new ApiErrorHandler(401, "Password is incorrect");
+  }
+
+  const { accessToken, refreshToken } =
+    await generateAccessTokenAndRefreshToken(user);
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  const loggedInUser = {
+    userName: user.username,
+    email: user.email,
+    fullName: user.fullName,
+    avatar: user.avatar,
+    coverImage: user.coverImage,
+    _id: user._id,
+    createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
+  };
+
+  return res
+    .status(200)
+    .cookie("refreshToken", refreshToken, options)
+    .cookie("accessToken", accessToken, options)
+    .json(
+      new ApiResponseHandler(
+        200,
+        { loggedInUser, accessToken, refreshToken },
+        "User logged in successfully"
+      )
+    );
+});
+
+export const logoutUser = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  await User.findByIdAndUpdate(
+    user._id,
+    {
+      $set: {
+        refreshToken: "",
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
+
+  // user.refreshToken = "";
+  // await user.save({ validateBeforeSave: true });
+
+  return res
+    .status(200)
+    .clearCookie("refreshToken", options)
+    .clearCookie("accessToken", options)
+    .json(new ApiResponseHandler(200, null, "User logged out successfully"));
 });
