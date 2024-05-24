@@ -8,7 +8,7 @@ import {
 } from "../utils/Validations.js";
 import { User } from "../models/User.model.js";
 import uploadOnCloudinary from "../services/Cloudinary.services.js";
-import { AVATAR, COVER_IMAGE } from "../constants.js";
+import { AVATAR, COOKIE_OPTIONS, COVER_IMAGE } from "../constants.js";
 
 const generateAccessTokenAndRefreshToken = async (user) => {
   try {
@@ -135,11 +135,6 @@ export const loginUser = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } =
     await generateAccessTokenAndRefreshToken(user);
 
-  const options = {
-    httpOnly: true,
-    secure: true,
-  };
-
   const loggedInUser = {
     userName: user.username,
     email: user.email,
@@ -153,8 +148,8 @@ export const loginUser = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
-    .cookie("refreshToken", refreshToken, options)
-    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, COOKIE_OPTIONS)
+    .cookie("accessToken", accessToken, COOKIE_OPTIONS)
     .json(
       new ApiResponseHandler(
         200,
@@ -179,17 +174,54 @@ export const logoutUser = asyncHandler(async (req, res) => {
     }
   );
 
-  const options = {
-    httpOnly: true,
-    secure: true,
-  };
-
   // user.refreshToken = "";
   // await user.save({ validateBeforeSave: true });
 
   return res
     .status(200)
-    .clearCookie("refreshToken", options)
-    .clearCookie("accessToken", options)
+    .clearCookie("refreshToken", COOKIE_OPTIONS)
+    .clearCookie("accessToken", COOKIE_OPTIONS)
     .json(new ApiResponseHandler(200, null, "User logged out successfully"));
+});
+
+export const refreshAccessToken = asyncHandler(async (req, res) => {
+  const requestToken = req.cookies.accessToken || req.body.accessToken;
+
+  if (!requestToken) {
+    throw new ApiErrorHandler(401, "Unauthorized User");
+  }
+
+  try {
+    const decodedToken = await jwt.verify(
+      requestToken,
+      process.env.REFRESH_TOKEN_SECRET
+    );
+
+    const user = await User.findById(decodedToken?._id);
+
+    if (!user) {
+      throw new ApiErrorHandler(401, "Invalid Refresh Token");
+    }
+
+    if (requestToken !== user.refreshToken) {
+      throw new ApiErrorHandler(401, "Refresh Token is expired");
+    }
+
+    const { accessToken, refreshToken } =
+      await generateAccessTokenAndRefreshToken(user);
+
+    return res
+      .status(200)
+      .cookie("refreshToken", refreshToken, COOKIE_OPTIONS)
+      .cookie("accessToken", accessToken, COOKIE_OPTIONS)
+      .json(
+        new ApiResponseHandler(
+          "200",
+          { accessToken: accessToken, refreshToken: refreshToken },
+          "Access Token updated successfully"
+        )
+      );
+  } catch (error) {
+    throw new ApiErrorHandler(401, "Invalid Refresh Token");
+  }
 });
