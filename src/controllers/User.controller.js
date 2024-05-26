@@ -7,7 +7,10 @@ import {
   validateEmail,
 } from "../utils/Validations.js";
 import { User } from "../models/User.model.js";
-import uploadOnCloudinary from "../services/Cloudinary.services.js";
+import {
+  uploadOnCloudinary,
+  removeFromCloudinary,
+} from "../services/Cloudinary.services.js";
 import { AVATAR, COOKIE_OPTIONS, COVER_IMAGE } from "../constants.js";
 
 const generateAccessTokenAndRefreshToken = async (user) => {
@@ -24,6 +27,32 @@ const generateAccessTokenAndRefreshToken = async (user) => {
       500,
       "Something went wrong while generating access token and refresh token"
     );
+  }
+};
+
+const getUserFromDB = async (userId) => {
+  try {
+    const loggedInUser = await User.find(userId).select(
+      "-password -refreshToken"
+    );
+
+    return loggedInUser;
+  } catch (err) {
+    throw new ApiErrorHandler("500", "Error while fetching the user.");
+  }
+};
+
+const updateFieldInUser = async (userId, valuesToBeUpdated) => {
+  try {
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        $set: valuesToBeUpdated,
+      },
+      { new: true }
+    );
+  } catch (error) {
+    throw new ApiErrorHandler("500", "Error while updating the user.");
   }
 };
 
@@ -103,14 +132,7 @@ export const registerUser = asyncHandler(async (req, res) => {
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
-  console.log("req.body : ", req.body);
   const { userName, email, password } = req.body;
-  console.log(
-    "🚀 ~ loginUser ~ username, email, password:",
-    userName,
-    email,
-    password
-  );
 
   if (email && !validateEmail(email)) {
     throw new ApiErrorHandler(400, "Please input correct email.");
@@ -119,8 +141,6 @@ export const loginUser = asyncHandler(async (req, res) => {
   const user = await User.findOne({
     $or: [{ email }, { userName }],
   });
-
-  console.log("user :", user);
 
   if (!user) {
     throw new ApiErrorHandler(404, "User not found");
@@ -135,16 +155,7 @@ export const loginUser = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } =
     await generateAccessTokenAndRefreshToken(user);
 
-  const loggedInUser = {
-    userName: user.username,
-    email: user.email,
-    fullName: user.fullName,
-    avatar: user.avatar,
-    coverImage: user.coverImage,
-    _id: user._id,
-    createdAt: user.createdAt,
-    updatedAt: user.updatedAt,
-  };
+  const loggedInUser = getUserFromDB(user._id);
 
   return res
     .status(200)
@@ -162,19 +173,7 @@ export const loginUser = asyncHandler(async (req, res) => {
 export const logoutUser = asyncHandler(async (req, res) => {
   const user = req.user;
 
-  await User.findByIdAndUpdate(
-    user._id,
-    {
-      $set: {
-        refreshToken: "",
-      },
-    },
-    {
-      new: true,
-    }
-  );
-
-  // user.refreshToken = "";
+  await updateFieldInUser(user._id, { refreshToken: "" });
   // await user.save({ validateBeforeSave: true });
 
   return res
@@ -224,4 +223,161 @@ export const refreshAccessToken = asyncHandler(async (req, res) => {
   } catch (error) {
     throw new ApiErrorHandler(401, "Invalid Refresh Token");
   }
+});
+
+export const updateUserPassword = asyncHandler(async (req, res) => {
+  const user = req.user;
+
+  const { oldPassword, newPassword } = req.body;
+
+  const isPasswordCorrect = await user.comparePassword(oldPassword);
+
+  if (!isPasswordCorrect) {
+    throw new ApiErrorHandler(401, "Old password is incorrect");
+  }
+
+  await updateFieldInUser(user._id, { password: newPassword });
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponseHandler(200, null, "User password updated successfully")
+    );
+});
+
+export const updateUserProfile = asyncHandler(async (req, res) => {
+  let user = req?.user;
+
+  if (!user) {
+    throw new ApiErrorHandler("401", "User not found");
+  }
+
+  const { userName = null, email = null, fullName = null } = req?.body;
+
+  const fieldsToBeUpdated = {};
+
+  if (userName) {
+    fieldsToBeUpdated.userName = userName;
+  }
+  if (email) {
+    if (validateEmail(email)) {
+      fieldsToBeUpdated.email = email;
+    } else {
+      throw new ApiErrorHandler("400", "Please input correct email");
+    }
+  }
+  if (fullName) {
+    fieldsToBeUpdated.fullName = fullName;
+  }
+
+  await updateFieldInUser(user, fieldsToBeUpdated);
+
+  const loggedInUser = await getUserFromDB(user._id);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponseHandler(
+        "200",
+        { user: loggedInUser },
+        "User profile updated successfully"
+      )
+    );
+});
+
+export const updateUserAvatar = asyncHandler(async (req, res) => {
+  const avatarLocalPath = req?.file?.avatar;
+  const user = req?.user;
+
+  if (!avatarLocalPath) {
+    throw new ApiErrorHandler("400", "Image not found");
+  }
+
+  const removedSuccessfully = await removeFromCloudinary(user.avatar);
+
+  if (!removedSuccessfully) {
+    throw new ApiErrorHandler(
+      "500",
+      "Something went wrong while uploading avatar"
+    );
+  }
+
+  const avatar = await uploadOnCloudinary(avatarLocalPath);
+
+  if (!avatar) {
+    throw new ApiErrorHandler(
+      "500",
+      "Something went wrong while uploading avatar"
+    );
+  }
+
+  await updateFieldInUser(user._id, { avatar: avatar?.url });
+
+  user = { ...user, avatar: avatar?.url };
+
+  const loggedInUser = getUserFromDB(user._id);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponseHandler(
+        "200",
+        { user: loggedInUser },
+        "Avatar uploaded successfully"
+      )
+    );
+});
+
+export const updateUserCoverImage = asyncHandler(async (req, res) => {
+  const coverImageLocalPath = req?.file?.coverImage;
+  const user = req?.user;
+
+  if (!coverImageLocalPath) {
+    throw new ApiErrorHandler("400", "Image not found");
+  }
+
+  const coverImage = await uploadOnCloudinary(coverImageLocalPath);
+
+  if (!coverImage) {
+    throw new ApiErrorHandler(
+      "500",
+      "Something went wrong while uploading coverImage"
+    );
+  }
+
+  await updateFieldInUser(user._id, { coverImage: coverImage?.url });
+
+  user = { ...user, coverImage: coverImage?.url };
+
+  const loggedInUser = getUserFromDB(user._id);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponseHandler(
+        "200",
+        { user: loggedInUser },
+        "Cover Image uploaded successfully"
+      )
+    );
+});
+
+export const getUserProfile = asyncHandler(async (req, res) => {
+  const user = req?.user;
+
+  if (!user) {
+    throw new ApiErrorHandler("401", "User not found");
+  }
+
+  const loggedInUser = getUserFromDB(user._id);
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponseHandler(
+        "200",
+        { user: loggedInUser },
+        "User profile fetched successfully"
+      )
+    );
 });
