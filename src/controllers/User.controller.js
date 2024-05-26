@@ -155,7 +155,7 @@ export const loginUser = asyncHandler(async (req, res) => {
   const { accessToken, refreshToken } =
     await generateAccessTokenAndRefreshToken(user);
 
-  const loggedInUser = getUserFromDB(user._id);
+  const loggedInUser = await getUserFromDB(user._id);
 
   return res
     .status(200)
@@ -315,7 +315,7 @@ export const updateUserAvatar = asyncHandler(async (req, res) => {
 
   user = { ...user, avatar: avatar?.url };
 
-  const loggedInUser = getUserFromDB(user._id);
+  const loggedInUser = await getUserFromDB(user._id);
 
   return res
     .status(200)
@@ -349,7 +349,7 @@ export const updateUserCoverImage = asyncHandler(async (req, res) => {
 
   user = { ...user, coverImage: coverImage?.url };
 
-  const loggedInUser = getUserFromDB(user._id);
+  const loggedInUser = await getUserFromDB(user._id);
 
   return res
     .status(200)
@@ -369,7 +369,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
     throw new ApiErrorHandler("401", "User not found");
   }
 
-  const loggedInUser = getUserFromDB(user._id);
+  const loggedInUser = await getUserFromDB(user._id);
 
   return res
     .status(200)
@@ -377,6 +377,82 @@ export const getUserProfile = asyncHandler(async (req, res) => {
       new ApiResponseHandler(
         "200",
         { user: loggedInUser },
+        "User profile fetched successfully"
+      )
+    );
+});
+
+export const getUserChannelProfile = asyncHandler(async (req, res) => {
+  const { userName } = req?.query;
+
+  if (!userName) {
+    throw new ApiErrorHandler("400", "Invalid username");
+  }
+
+  // Returns an array of matches.
+  // Every object denotes a pipeline.
+  // lookup is left join.
+  const user = await User.aggregate([
+    {
+      $match: { userName: userName?.toLowerCase() },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "channel",
+        as: "subscribers",
+      },
+    },
+    {
+      $lookup: {
+        from: "subscriptions",
+        localField: "_id",
+        foreignField: "subscriber",
+        as: "subscribedTo",
+      },
+    },
+    {
+      $addFields: {
+        subscribersCount: {
+          $size: "$subscribers",
+        },
+        subscribedToCount: {
+          $size: "$subscribedTo",
+        },
+        isSubscribedTo: {
+          $cond: {
+            if: { $in: [req.user?._id, "$subscribers.subscriber"] },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+    {
+      $project: {
+        userName: 1,
+        email: 1,
+        fullName: 1,
+        avatar: 1,
+        coverImage: 1,
+        subscribersCount: 1,
+        subscribedToCount: 1,
+        isSubscribedTo: 1,
+      },
+    },
+  ]);
+
+  if (!user?.length) {
+    throw new ApiErrorHandler("404", "User not found");
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponseHandler(
+        "200",
+        { user: user?.[0] },
         "User profile fetched successfully"
       )
     );

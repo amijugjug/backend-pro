@@ -1,5 +1,7 @@
 import { Router } from "express";
 import {
+  getUserChannelProfile,
+  getUserProfile,
   loginUser,
   logoutUser,
   refreshAccessToken,
@@ -47,4 +49,9 @@ userRouter
   .patch(verifyJWT, upload.single(COVER_IMAGE), updateUserCoverImage);
 
 userRouter.route("/update-user-profile").patch(verifyJWT, updateUserProfile);
+
+userRouter.route("/get-user-profile").get(verifyJWT, getUserProfile);
+
+userRouter.route("/get-user-channel").get(getUserChannelProfile);
+
 export default userRouter;
