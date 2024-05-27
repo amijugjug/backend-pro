@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getUserChannelProfile,
   getUserProfile,
+  getWatchHistory,
   loginUser,
   logoutUser,
   refreshAccessToken,
@@ -52,6 +53,10 @@ userRouter.route("/update-user-profile").patch(verifyJWT, updateUserProfile);
 
 userRouter.route("/get-user-profile").get(verifyJWT, getUserProfile);
 
-userRouter.route("/get-user-channel").get(getUserChannelProfile);
+userRouter
+  .route("/get-user-channel-profile/:userName")
+  .get(getUserChannelProfile);
+
+userRouter.route("/get-watch-history").get(verifyJWT, getWatchHistory);
 
 export default userRouter;

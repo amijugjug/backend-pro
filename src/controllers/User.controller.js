@@ -42,12 +42,16 @@ const getUserFromDB = async (userId) => {
   }
 };
 
-const updateFieldInUser = async (userId, valuesToBeUpdated) => {
+const updateFieldInUser = async (
+  userId,
+  valuesToBeUpdated,
+  action = "$set"
+) => {
   try {
     await User.findByIdAndUpdate(
       userId,
       {
-        $set: valuesToBeUpdated,
+        [action]: valuesToBeUpdated,
       },
       { new: true }
     );
@@ -173,8 +177,7 @@ export const loginUser = asyncHandler(async (req, res) => {
 export const logoutUser = asyncHandler(async (req, res) => {
   const user = req.user;
 
-  await updateFieldInUser(user._id, { refreshToken: "" });
-  // await user.save({ validateBeforeSave: true });
+  await updateFieldInUser(user._id, { refreshToken: 1 }, "$unset");
 
   return res
     .status(200)
@@ -383,7 +386,7 @@ export const getUserProfile = asyncHandler(async (req, res) => {
 });
 
 export const getUserChannelProfile = asyncHandler(async (req, res) => {
-  const { userName } = req?.query;
+  const { userName } = req?.params;
 
   if (!userName) {
     throw new ApiErrorHandler("400", "Invalid username");
@@ -454,6 +457,69 @@ export const getUserChannelProfile = asyncHandler(async (req, res) => {
         "200",
         { user: user?.[0] },
         "User profile fetched successfully"
+      )
+    );
+});
+
+export const getWatchHistory = asyncHandler(async (req, res) => {
+  const userId = req?.user?._id;
+
+  if (!userId) {
+    throw new ApiErrorHandler("400", "User nor found.");
+  }
+
+  const user = await User.aggregate([
+    {
+      $match: { _id: mongoose.Types.ObjectId(userId) },
+    },
+    {
+      $lookup: {
+        from: "videos",
+        localField: "watchHistory",
+        foreignField: "_id",
+        as: "watchHistory",
+        pipeline: [
+          {
+            $lookup: {
+              from: "users",
+              localField: "owner",
+              foreignField: "_id",
+              as: "owner",
+              pipeline: [
+                {
+                  $project: {
+                    userName: 1,
+                    fullName: 1,
+                    email: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              owner: {
+                $first: "$owner",
+              },
+            },
+          },
+        ],
+      },
+    },
+  ]);
+
+  if (!user) {
+    throw new ApiErrorHandler("400", "User nor found.");
+  }
+
+  return res
+    .status(200)
+    .json(
+      new ApiResponseHandler(
+        "200",
+        user[0]?.watchHistory,
+        "Watch history fetched successfully"
       )
     );
 });
