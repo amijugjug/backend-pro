@@ -33,3 +33,9 @@ export const separateFilename = (filename) => {
 
   return [name, extension];
 };
+
+export const isAuthorizedUser = (currentUser, authorizedUser) => {
+  const currentUserId = currentUser._id;
+  const authorizedUserId = authorizedUser._id;
+  return currentUserId === authorizedUserId;
+};
